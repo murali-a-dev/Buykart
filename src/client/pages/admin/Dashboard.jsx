@@ -24,6 +24,7 @@ const Dashboard = () => {
     users: [],
   });
   const [loading, setLoading] = useState(true);
+  const [fetchError, setFetchError] = useState(null);
 
   const fetchDashboardData = async () => {
     setLoading(true);
@@ -34,6 +35,7 @@ const Dashboard = () => {
         axios.get('/admin/users'),
       ]);
 
+      setFetchError(null);
       setStats({
         products: Array.isArray(inventoryRes.data) ? inventoryRes.data : [],
         orders: Array.isArray(ordersRes.data) ? ordersRes.data : [],
@@ -42,6 +44,7 @@ const Dashboard = () => {
       setLoading(false);
     } catch (err) {
       console.error('Error fetching dashboard statistics:', err);
+      setFetchError('Failed to load dashboard data. Please refresh the page.');
       setLoading(false);
     }
   };
@@ -56,10 +59,15 @@ const Dashboard = () => {
 
   // Compute summary stats
   const totalProducts = safeProducts.length;
+  // FIX: Inventory valuation = stock value (price × qty on hand) — NOT revenue
   const totalInventoryValue = safeProducts.reduce(
     (sum, item) => sum + Number(item.price || 0) * Number(item.op_stock || 0),
     0
   );
+  // FIX: Real sales revenue = sum of delivered order totals only
+  const totalSalesRevenue = safeOrders
+    .filter((o) => String(o.status || '').toLowerCase() === 'delivered')
+    .reduce((sum, o) => sum + Number(o.total || o.finalAmount || 0), 0);
   const totalOrders = safeOrders.length;
   const totalUsers = safeUsers.length;
 
@@ -75,17 +83,20 @@ const Dashboard = () => {
     salesByDay[key] = 0;
   }
 
-  safeOrders.forEach((order) => {
-    if (!order.createdAt) return;
-    const dateKey = new Date(order.createdAt).toISOString().split('T')[0];
-    if (salesByDay.hasOwnProperty(dateKey)) {
-      const orderTotal = Number(order.total) || Object.values(order.items || {}).reduce(
-        (sum, item) => sum + Number(item.price || 0) * Number(item.quantity || 1),
-        0
-      );
-      salesByDay[dateKey] += orderTotal;
-    }
-  });
+  // FIX: Chart only counts delivered orders as revenue, not pending/cancelled
+  safeOrders
+    .filter((o) => String(o.status || '').toLowerCase() === 'delivered')
+    .forEach((order) => {
+      if (!order.createdAt) return;
+      const dateKey = new Date(order.createdAt).toISOString().split('T')[0];
+      if (salesByDay.hasOwnProperty(dateKey)) {
+        const orderTotal = Number(order.total) || Object.values(order.items || {}).reduce(
+          (sum, item) => sum + Number(item.price || 0) * Number(item.quantity || 1),
+          0
+        );
+        salesByDay[dateKey] += orderTotal;
+      }
+    });
 
   const chartLabels = Object.keys(salesByDay).map((dateStr) => {
     const d = new Date(dateStr);
@@ -279,11 +290,21 @@ const Dashboard = () => {
 
           <div className="bg-white p-5 rounded-2xl border border-slate-200/90 shadow-2xs flex items-center justify-between">
             <div>
-              <p className="text-xs font-medium text-slate-500">Inventory Valuation</p>
+              <p className="text-xs font-medium text-slate-500">Inventory Stock Value</p>
               <h3 className="text-2xl font-bold text-slate-900 mt-1">₹{totalInventoryValue.toLocaleString('en-IN')}</h3>
             </div>
             <div className="w-11 h-11 rounded-xl bg-blue-50 text-blue-700 flex items-center justify-center">
               <MaterialIcon name="account_balance_wallet" size={22} />
+            </div>
+          </div>
+
+          <div className="bg-white p-5 rounded-2xl border border-slate-200/90 shadow-2xs flex items-center justify-between">
+            <div>
+              <p className="text-xs font-medium text-slate-500">Sales Revenue (Delivered)</p>
+              <h3 className="text-2xl font-bold text-slate-900 mt-1">₹{totalSalesRevenue.toLocaleString('en-IN')}</h3>
+            </div>
+            <div className="w-11 h-11 rounded-xl bg-emerald-50 text-emerald-700 flex items-center justify-center">
+              <MaterialIcon name="payments" size={22} />
             </div>
           </div>
 

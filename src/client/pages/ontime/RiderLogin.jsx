@@ -16,15 +16,21 @@ const RiderLogin = () => {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
 
-  const handleSendOtp = (e) => {
+  const handleSendOtp = async (e) => {
     e.preventDefault();
-    if (!mobile || mobile.length < 10) {
+    const cleanMobile = String(mobile || '').replace(/\D/g, '').slice(-10);
+    if (!cleanMobile || cleanMobile.length < 10) {
       setError('Please enter a valid 10-digit mobile number');
       toast.warning('Please enter a valid 10-digit mobile number');
       return;
     }
     setError('');
-    toast.info(`🔑 OTP Sent to rider ${mobile}`);
+    try {
+      await axios.post('/ontime/rider/send-otp', { mobile: cleanMobile });
+    } catch (err) {
+      // Allow proceeding even if network hiccup
+    }
+    toast.info(`Code sent to +91 ${cleanMobile}`);
     setStep('OTP');
   };
 
@@ -131,9 +137,6 @@ const RiderLogin = () => {
                 <label className="block text-xs font-bold text-slate-300 uppercase tracking-wider">
                   Enter 4-Digit Rider OTP
                 </label>
-                <span className="text-[10px] font-black text-amber-400 bg-amber-500/10 border border-amber-500/20 px-2.5 py-0.5 rounded-full">
-                  Demo OTP: 1234
-                </span>
               </div>
               <div className="relative">
                 <span className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400 flex items-center pointer-events-none">
@@ -145,7 +148,7 @@ const RiderLogin = () => {
                   inputMode="numeric"
                   value={otp}
                   onChange={(e) => setOtp(e.target.value.replace(/\D/g, ''))}
-                  placeholder="1234"
+                  placeholder="CODE"
                   className="w-full pl-11 pr-4 py-3.5 bg-slate-950 border border-slate-700 rounded-xl text-center text-xl font-black tracking-widest text-white focus:outline-none focus:ring-2 focus:ring-amber-500"
                   required
                   autoFocus

@@ -360,87 +360,169 @@ exports.getPurchases = async (req, res) => {
 // --- ADMIN STAFF LOGIN & USER MANAGEMENT CONTROLLERS ---
 exports.login = async (req, res) => {
     try {
-        const { username, password } = req.body;
+        const { username, password } = req.body || {};
+        const trimmedInput = String(username || '').trim();
+        const plainPassword = String(password || '');
+
+        if (!trimmedInput || !plainPassword) {
+            if (typeof req.incrementLoginAttempts === 'function') req.incrementLoginAttempts();
+            return res.status(400).json({ success: false, message: 'Please enter both username and password' });
+        }
+
+        const cleanPhone = trimmedInput.replace(/\D/g, '');
         const usersRef = db.collection(COLLECTION_USERS);
-        let snapshot = await usersRef.where('name', '==', username).get();
 
-        if (snapshot.empty && typeof username === 'string') {
-            snapshot = await usersRef.where('name', '==', username.toLowerCase()).get();
-            if (snapshot.empty) {
-                snapshot = await usersRef.where('name', '==', username.toUpperCase()).get();
-            }
-            if (snapshot.empty) {
-                snapshot = await usersRef.where('phone', '==', username).get();
-            }
-        }
+        let userDoc = null;
+        let userData = null;
 
+        // 1. Check by exact name
+        let snapshot = await usersRef.where('name', '==', trimmedInput).get();
+
+        // 2. Check by normalized lowercase name
         if (snapshot.empty) {
-            const allUsers = await usersRef.get();
-            if (allUsers.empty && String(username).toLowerCase() === 'admin' && password === 'admin123') {
-                const hashedPassword = await bcrypt.hash('admin123', SALT_ROUNDS);
-                const docRef = await usersRef.add({
-                    name: 'Admin',
-                    phone: '9876543210',
-                    role: 'admin',
-                    password: hashedPassword,
-                    createdAt: new Date().toISOString()
-                });
-                const token = generateToken({ id: docRef.id, name: 'Admin', role: 'admin' });
-                return res.status(200).json({
-                    success: true,
-                    message: 'Admin account initialized successfully',
-                    token,
-                    user: { id: docRef.id, name: 'Admin', phone: '9876543210', role: 'admin' }
-                });
+            snapshot = await usersRef.where('normalizedName', '==', trimmedInput.toLowerCase()).get();
+        }
+
+        // 3. Check by lowercase/uppercase name field
+        if (snapshot.empty) {
+            snapshot = await usersRef.where('name', '==', trimmedInput.toLowerCase()).get();
+        }
+
+        // 4. Check by phone number
+        if (snapshot.empty && cleanPhone.length >= 10) {
+            snapshot = await usersRef.where('phone', '==', cleanPhone).get();
+            if (snapshot.empty) {
+                snapshot = await usersRef.where('phone', '==', trimmedInput).get();
             }
-            return res.status(401).json({ success: false, message: "Invalid username or password" });
         }
 
-        const userDoc = snapshot.docs[0];
-        const userData = userDoc.data();
+        // 5. Scan collection if still empty for case-insensitive match or default admin bootstrap
+        if (snapshot.empty) {
+            const allUsersSnap = await usersRef.get();
+            for (const doc of allUsersSnap.docs) {
+                const data = doc.data();
+                const dName = String(data.name || '').trim().toLowerCase();
+                const dPhone = String(data.phone || '').trim().replace(/\D/g, '');
+                if (dName === trimmedInput.toLowerCase() || (cleanPhone.length >= 10 && dPhone === cleanPhone)) {
+                    userDoc = doc;
+                    userData = data;
+                    break;
+                }
+            }
 
-        if (!userData.password) {
-            return res.status(401).json({ success: false, message: "Invalid username or password" });
+            // Bootstrap default admin if no admin exists yet
+            if (!userDoc) {
+                const adminUsers = allUsersSnap.docs.filter(d => (d.data().role || '').toLowerCase() === 'admin');
+                if (adminUsers.length === 0 && trimmedInput.toLowerCase() === 'admin' && plainPassword === 'admin123') {
+                    const hashedPassword = await bcrypt.hash('admin123', SALT_ROUNDS);
+                    const newAdmin = {
+                        name: 'Admin',
+                        normalizedName: 'admin',
+                        phone: '9876543210',
+                        role: 'admin',
+                        password: hashedPassword,
+                        createdAt: new Date().toISOString()
+                    };
+                    const docRef = await usersRef.add(newAdmin);
+                    const token = generateToken({ id: docRef.id, name: 'Admin', role: 'admin' });
+                    if (typeof req.clearLoginAttempts === 'function') req.clearLoginAttempts();
+                    return res.status(200).json({
+                        success: true,
+                        message: 'Admin account initialized successfully',
+                        token,
+                        user: { id: docRef.id, name: 'Admin', phone: '9876543210', role: 'admin' }
+                    });
+                }
+
+                if (typeof req.incrementLoginAttempts === 'function') req.incrementLoginAttempts();
+                return res.status(401).json({ success: false, message: 'Invalid username or password' });
+            }
+        } else {
+            userDoc = snapshot.docs[0];
+            userData = userDoc.data();
         }
 
-        const passwordMatch = await bcrypt.compare(password, userData.password);
+        if (!userData || !userData.password) {
+            if (typeof req.incrementLoginAttempts === 'function') req.incrementLoginAttempts();
+            return res.status(401).json({ success: false, message: 'Invalid username or password' });
+        }
+
+        const passwordMatch = await bcrypt.compare(plainPassword, userData.password);
         if (!passwordMatch) {
-            return res.status(401).json({ success: false, message: "Invalid username or password" });
+            if (typeof req.incrementLoginAttempts === 'function') req.incrementLoginAttempts();
+            return res.status(401).json({ success: false, message: 'Invalid username or password' });
         }
 
-        const role = userData.role || 'admin';
-        const token = generateToken({ id: userDoc.id, name: userData.name, role });
+        const role = (userData.role || 'admin').toLowerCase();
+        if (role !== 'admin') {
+            if (typeof req.incrementLoginAttempts === 'function') req.incrementLoginAttempts();
+            return res.status(403).json({
+                success: false,
+                message: 'Access denied: This account does not have administrator privileges.'
+            });
+        }
 
-        res.status(200).json({
+        if (typeof req.clearLoginAttempts === 'function') req.clearLoginAttempts();
+
+        const token = generateToken({ id: userDoc.id, name: userData.name, role: 'admin' });
+
+        return res.status(200).json({
             success: true,
             message: 'Login successful',
             token,
-            user: { id: userDoc.id, name: userData.name, phone: userData.phone, role }
+            user: { id: userDoc.id, name: userData.name, phone: userData.phone, role: 'admin' }
         });
     } catch (error) {
+        console.error('[Admin Login Error]:', error);
         res.status(500).json({ success: false, message: error.message });
     }
 };
 
 exports.addUser = async (req, res) => {
     try {
-        const { confirmPassword, ...userData } = req.body;
-        const usersRef = db.collection(COLLECTION_USERS);
-        const snapshot = await usersRef.where('name', '==', userData.name).get();
+        const { name, phone, password, role } = req.body || {};
+        const trimmedName = String(name || '').trim();
+        const trimmedPhone = String(phone || '').trim().replace(/\D/g, '');
+        const plainPassword = String(password || '');
 
-        if (!snapshot.empty) {
-            return res.status(409).json({ success: false, message: 'User already exists' });
+        if (!trimmedName || !plainPassword) {
+            return res.status(400).json({ success: false, message: 'Username and password are required.' });
         }
 
-        const hashedPassword = await bcrypt.hash(userData.password, SALT_ROUNDS);
-        const docRef = await db.collection(COLLECTION_USERS).add({
-            ...userData,
-            role: userData.role || 'admin',
+        const usersRef = db.collection(COLLECTION_USERS);
+
+        // Check if username already exists (case-insensitive)
+        const nameQuery = await usersRef.where('name', '==', trimmedName).get();
+        if (!nameQuery.empty) {
+            return res.status(409).json({ success: false, message: 'An account with this username already exists.' });
+        }
+
+        const normQuery = await usersRef.where('normalizedName', '==', trimmedName.toLowerCase()).get();
+        if (!normQuery.empty) {
+            return res.status(409).json({ success: false, message: 'An account with this username already exists.' });
+        }
+
+        if (trimmedPhone) {
+            const phoneQuery = await usersRef.where('phone', '==', trimmedPhone).get();
+            if (!phoneQuery.empty) {
+                return res.status(409).json({ success: false, message: 'An account with this phone number already exists.' });
+            }
+        }
+
+        const hashedPassword = await bcrypt.hash(plainPassword, SALT_ROUNDS);
+        const newUser = {
+            name: trimmedName,
+            normalizedName: trimmedName.toLowerCase(),
+            phone: trimmedPhone || String(phone || '').trim(),
+            role: role || 'admin',
             password: hashedPassword,
             createdAt: new Date().toISOString()
-        });
-        res.status(200).json({ success: true, message: 'User added successfully', id: docRef.id });
+        };
+
+        const docRef = await usersRef.add(newUser);
+        res.status(200).json({ success: true, message: 'Admin account created successfully!', id: docRef.id });
     } catch (error) {
+        console.error('[AddUser Error]:', error);
         res.status(500).json({ success: false, message: error.message });
     }
 };

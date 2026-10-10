@@ -19,7 +19,7 @@ const AdminFooter = () => {
             rel="noopener noreferrer"
             className="text-emerald-400 font-extrabold underline hover:text-emerald-300 transition"
           >
-            Murali <span className='text-red-600'>❤</span>
+            Murali
           </a>
         </div>
       </div>

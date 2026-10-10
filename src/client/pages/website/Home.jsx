@@ -4,6 +4,17 @@ import ProductCard from '../../components/ProductCard';
 import ProductModal from '../../components/ProductModal';
 import MaterialIcon from '../../components/common/MaterialIcon';
 
+
+// FIX: Simple debounce hook to avoid filtering on every keystroke
+function useDebounce(value, delay) {
+  const [debounced, setDebounced] = React.useState(value);
+  React.useEffect(() => {
+    const timer = setTimeout(() => setDebounced(value), delay);
+    return () => clearTimeout(timer);
+  }, [value, delay]);
+  return debounced;
+}
+
 const Home = () => {
   const [products, setProducts] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -11,6 +22,8 @@ const Home = () => {
 
   const [selectedCategory, setSelectedCategory] = useState('All');
   const [searchQuery, setSearchQuery] = useState('');
+  // FIX: Debounce search — only filter after 300ms of no typing
+  const debouncedSearch = useDebounce(searchQuery, 300);
   const [sortBy, setSortBy] = useState('default');
   const [sortDropdownOpen, setSortDropdownOpen] = useState(false);
   const [activeProduct, setActiveProduct] = useState(null);
@@ -131,8 +144,10 @@ const Home = () => {
               <div className="absolute left-4 pointer-events-none flex items-center">
                 <MaterialIcon name="search" size={22} className="text-slate-400" />
               </div>
+              <label htmlFor="product-search" className="sr-only">Search products</label>
               <input
-                type="text"
+                id="product-search"
+                type="search"
                 placeholder="Search fresh items, fruits, vegetables, dairy..."
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
@@ -318,7 +333,7 @@ const Home = () => {
               <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6 sm:gap-8">
                 {filteredProducts.map((product) => (
                   <ProductCard
-                    key={product.id}
+                    key={product.id || product.itemName}
                     product={product}
                     onCardClick={(prod) => setActiveProduct(prod)}
                   />

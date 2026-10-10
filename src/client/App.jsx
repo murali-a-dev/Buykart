@@ -28,35 +28,41 @@ import PurchaseEntry from './pages/admin/PurchaseEntry';
 
 import RiderLogin from './pages/ontime/RiderLogin';
 import RiderDashboard from './pages/ontime/RiderDashboard';
+import ErrorBoundary from './components/ErrorBoundary';
 
 // Layout for Public E-Commerce Website
 const WebsiteLayout = () => {
   return (
-    <div className="flex flex-col min-h-screen">
-      <Navbar />
-      <div className="flex-grow">
-        <Outlet />
+    <ErrorBoundary>
+      <div className="flex flex-col min-h-screen">
+        <Navbar />
+        <div className="flex-grow">
+          <Outlet />
+        </div>
+        <Footer />
       </div>
-      <Footer />
-    </div>
+    </ErrorBoundary>
   );
 };
 
 // Layout for Protected Admin Panel
 const AdminLayout = () => {
   return (
-    <div className="flex flex-col min-h-screen bg-slate-50">
-      <AdminNavbar />
-      <div className="flex-grow">
-        <Outlet />
+    <ErrorBoundary>
+      <div className="flex flex-col min-h-screen bg-slate-50">
+        <AdminNavbar />
+        <div className="flex-grow">
+          <Outlet />
+        </div>
+        <AdminFooter />
       </div>
-      <AdminFooter />
-    </div>
+    </ErrorBoundary>
   );
 };
 
 const App = () => {
   return (
+    <ErrorBoundary>
     <AuthProvider>
       <CartProvider>
         <ToastProvider>
@@ -152,6 +158,7 @@ const App = () => {
         </ToastProvider>
       </CartProvider>
     </AuthProvider>
+  </ErrorBoundary>
   );
 };
 

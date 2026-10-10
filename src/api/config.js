@@ -5,17 +5,17 @@ const serviceAccountPath = path.join(__dirname, '../../credentials.json');
 let serviceAccount = null;
 
 try {
-    // 1. Production: Use environment variables (Vercel)
-    if (process.env.FIREBASE_PRIVATE_KEY) {
+    // 1. Check local credentials.json file first if present
+    if (fs.existsSync(serviceAccountPath)) {
+        serviceAccount = require(serviceAccountPath);
+    } 
+    // 2. Production or valid environment variables (e.g., Vercel)
+    else if (process.env.FIREBASE_PRIVATE_KEY && !process.env.FIREBASE_PRIVATE_KEY.includes('YOUR_PRIVATE_KEY_HERE')) {
         serviceAccount = {
             project_id: process.env.FIREBASE_PROJECT_ID,
             client_email: process.env.FIREBASE_CLIENT_EMAIL,
             private_key: process.env.FIREBASE_PRIVATE_KEY.replace(/\\n/g, '\n'),
         };
-    } 
-    // 2. Local: Use credentials.json file
-    else if (fs.existsSync(serviceAccountPath)) {
-        serviceAccount = require(serviceAccountPath);
     }
 } catch (err) {
     console.warn("⚠️ Firebase service account load error:", err.message);

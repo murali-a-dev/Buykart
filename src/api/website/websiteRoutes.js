@@ -25,6 +25,9 @@ router.post('/contact', controller.saveContactMessage);
 router.post('/customer/profile', authenticateCustomer, validate([validation.validateUpdateProfile]), controller.updateCustomerProfile);
 router.get('/customer/profile/:idOrMobile', authenticateCustomer, controller.getCustomerProfile);
 
+// Promo code validation (server-side — codes are never sent to the client)
+router.post('/promo/validate', authenticateCustomer, controller.validatePromo);
+
 // Checkout & Orders routes with validation
 router.post('/checkout', authenticateCustomer, validate([validation.validateCheckout]), controller.checkout);
 router.get('/orders', authenticateCustomer, controller.getOrders);

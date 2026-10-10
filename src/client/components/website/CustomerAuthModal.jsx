@@ -17,10 +17,13 @@ const CustomerAuthModal = ({ isOpen, onClose, onSuccess }) => {
   const [profileData, setProfileData] = useState({
     name: '',
     email: '',
-    street: '',
-    city: '',
+    location: '',
+    landmark: '',
+    mapUrl: '',
+    maplink: '',
     pincode: ''
   });
+  const [detectingGps, setDetectingGps] = useState(false);
 
   // Lock background scrolling while modal is open
   useEffect(() => {
@@ -40,6 +43,28 @@ const CustomerAuthModal = ({ isOpen, onClose, onSuccess }) => {
     setTimeout(() => setToastMessage(null), 4000);
   };
 
+  const handleDetectGps = () => {
+    if (!navigator.geolocation) {
+      setErrorMessage('Geolocation is not supported by your browser.');
+      return;
+    }
+    setDetectingGps(true);
+    navigator.geolocation.getCurrentPosition(
+      (pos) => {
+        const { latitude, longitude } = pos.coords;
+        const link = `https://maps.google.com/?q=${latitude},${longitude}`;
+        setProfileData((prev) => ({ ...prev, mapUrl: link, maplink: link }));
+        setDetectingGps(false);
+        showToast('Live GPS Location captured in Map URL!');
+      },
+      () => {
+        setDetectingGps(false);
+        setErrorMessage('Unable to retrieve GPS coordinates. You can paste a Google Maps link manually.');
+      },
+      { timeout: 10000 }
+    );
+  };
+
   const handleSendOtp = async (e) => {
     e.preventDefault();
     const cleanMobile = String(mobile || '').replace(/\D/g, '').slice(-10);
@@ -57,8 +82,8 @@ const CustomerAuthModal = ({ isOpen, onClose, onSuccess }) => {
         res = await axios.post('/customer/send-otp', { mobile: cleanMobile });
       }
       setLoading(false);
-      const simulatedOtp = res.data?.otp || '1234';
-      showToast(`🔑 Test OTP for ${cleanMobile} is ${simulatedOtp}`);
+      // FIX: OTP is never returned from server — it is sent to the user's phone only
+      showToast(`OTP sent to ${cleanMobile}. Please check your phone.`);
       setStep('OTP');
     } catch (err) {
       setLoading(false);
@@ -107,12 +132,19 @@ const CustomerAuthModal = ({ isOpen, onClose, onSuccess }) => {
     setErrorMessage('');
     setLoading(true);
     try {
-      const fullAddress = `${profileData.street}, ${profileData.city} - ${profileData.pincode}`.trim();
+      const addressObj = {
+        location: profileData.location.trim(),
+        mapUrl: (profileData.mapUrl || profileData.maplink || '').trim(),
+        landmark: profileData.landmark.trim(),
+        pincode: profileData.pincode.trim()
+      };
+
       const payload = {
-        name: profileData.name,
+        name: profileData.name.trim(),
         mobile,
-        email: profileData.email,
-        addresses: fullAddress ? [fullAddress] : []
+        email: profileData.email.trim(),
+        address: addressObj.location || addressObj.mapUrl ? [addressObj] : [],
+        addresses: addressObj.location || addressObj.mapUrl ? [addressObj] : []
       };
 
       const res = await axios.post('/website/customer/profile', payload);
@@ -129,7 +161,7 @@ const CustomerAuthModal = ({ isOpen, onClose, onSuccess }) => {
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/70 backdrop-blur-sm p-4 animate-in fade-in duration-200">
-      <div className="relative w-full max-w-md bg-white rounded-3xl shadow-2xl overflow-hidden border border-slate-100">
+      <div className="relative w-full max-w-md bg-white rounded-3xl shadow-2xl overflow-hidden border border-slate-100 max-h-[90vh] flex flex-col">
 
         {/* Toast Alert Banner */}
         {toastMessage && (
@@ -145,7 +177,7 @@ const CustomerAuthModal = ({ isOpen, onClose, onSuccess }) => {
         )}
 
         {/* Modal Header */}
-        <div className="bg-gradient-to-r from-[#0D4715] to-[#1b5e20] text-white p-6 relative">
+        <div className="bg-gradient-to-r from-[#0D4715] to-[#1b5e20] text-white p-6 relative shrink-0">
           <button
             onClick={onClose}
             className="absolute top-4 right-4 text-white/80 hover:text-white p-1.5 rounded-full hover:bg-white/10 transition cursor-pointer"
@@ -165,7 +197,7 @@ const CustomerAuthModal = ({ isOpen, onClose, onSuccess }) => {
         </div>
 
         {/* Modal Body */}
-        <div className="p-6">
+        <div className="p-6 overflow-y-auto">
           {errorMessage && (
             <div className="mb-4 bg-rose-50 text-rose-700 border border-rose-200 text-xs font-semibold px-3.5 py-2.5 rounded-xl flex items-center gap-2">
               <MaterialIcon name="error" size={16} className="text-rose-600 shrink-0" filled />
@@ -233,9 +265,6 @@ const CustomerAuthModal = ({ isOpen, onClose, onSuccess }) => {
                   <label className="text-xs font-bold text-slate-700 uppercase tracking-wider">
                     Enter 4-Digit Code
                   </label>
-                  <span className="text-[10px] font-bold text-emerald-800 bg-emerald-100/80 px-2 py-0.5 rounded-md">
-                    Demo OTP: 1234
-                  </span>
                 </div>
                 <div className="relative flex items-center">
                   <div className="absolute left-3.5 pointer-events-none text-slate-400">
@@ -248,7 +277,7 @@ const CustomerAuthModal = ({ isOpen, onClose, onSuccess }) => {
                     maxLength={4}
                     value={otp}
                     onChange={(e) => setOtp(e.target.value.replace(/\D/g, ''))}
-                    placeholder="1234"
+                    placeholder="CODE"
                     className="w-full pl-10 pr-4 py-3 bg-slate-50 border border-slate-200 rounded-2xl text-center text-xl font-black tracking-widest text-slate-900 focus:bg-white focus:outline-none focus:ring-2 focus:ring-[#0D4715]"
                     required
                     autoFocus
@@ -307,16 +336,16 @@ const CustomerAuthModal = ({ isOpen, onClose, onSuccess }) => {
               </div>
 
               <div>
-                <label className="block text-[11px] font-bold text-slate-700 uppercase mb-1">Delivery Address</label>
+                <label className="block text-[11px] font-bold text-slate-700 uppercase mb-1">Delivery Location / Street *</label>
                 <div className="relative flex items-center">
                   <div className="absolute left-3 text-slate-400">
                     <MaterialIcon name="location_on" size={16} />
                   </div>
                   <input
                     type="text"
-                    value={profileData.street}
-                    onChange={(e) => setProfileData({ ...profileData, street: e.target.value })}
-                    placeholder="Flat / House No, Street"
+                    value={profileData.location}
+                    onChange={(e) => setProfileData({ ...profileData, location: e.target.value })}
+                    placeholder="Flat / House No, Street name"
                     className="w-full pl-9 pr-3 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-semibold text-slate-800 focus:bg-white focus:ring-2 focus:ring-[#0D4715]"
                   />
                 </div>
@@ -324,21 +353,56 @@ const CustomerAuthModal = ({ isOpen, onClose, onSuccess }) => {
 
               <div className="grid grid-cols-2 gap-2">
                 <div>
+                  <label className="block text-[11px] font-bold text-slate-700 uppercase mb-1">Landmark</label>
                   <input
                     type="text"
-                    value={profileData.city}
-                    onChange={(e) => setProfileData({ ...profileData, city: e.target.value })}
-                    placeholder="City"
-                    className="w-full px-3 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-semibold text-slate-800"
+                    value={profileData.landmark}
+                    onChange={(e) => setProfileData({ ...profileData, landmark: e.target.value })}
+                    placeholder="Near water tank"
+                    className="w-full px-3 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-semibold text-slate-800 focus:bg-white focus:ring-2 focus:ring-[#0D4715]"
                   />
                 </div>
                 <div>
+                  <label className="block text-[11px] font-bold text-slate-700 uppercase mb-1">Pincode</label>
                   <input
                     type="text"
+                    maxLength={6}
                     value={profileData.pincode}
-                    onChange={(e) => setProfileData({ ...profileData, pincode: e.target.value })}
-                    placeholder="Pincode"
-                    className="w-full px-3 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-semibold text-slate-800"
+                    onChange={(e) => setProfileData({ ...profileData, pincode: e.target.value.replace(/\D/g, '') })}
+                    placeholder="600001"
+                    className="w-full px-3 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-semibold text-slate-800 focus:bg-white focus:ring-2 focus:ring-[#0D4715]"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <div className="flex items-center justify-between mb-1">
+                  <label className="text-[11px] font-bold text-slate-700 uppercase">Map Link (mapUrl)</label>
+                  <button
+                    type="button"
+                    onClick={handleDetectGps}
+                    disabled={detectingGps}
+                    className="text-[11px] text-[#0D4715] font-bold hover:underline flex items-center gap-1 cursor-pointer"
+                  >
+                    <MaterialIcon name="my_location" size={13} className={detectingGps ? 'animate-spin' : ''} />
+                    <span>{detectingGps ? 'Capturing GPS...' : 'Detect GPS'}</span>
+                  </button>
+                </div>
+                <div className="relative flex items-center">
+                  <div className="absolute left-3 text-slate-400">
+                    <MaterialIcon name="map" size={16} />
+                  </div>
+                  <input
+                    type="url"
+                    value={profileData.mapUrl || profileData.maplink}
+                    onClick={() => {
+                      if (!profileData.mapUrl && !profileData.maplink && !detectingGps) {
+                        handleDetectGps();
+                      }
+                    }}
+                    onChange={(e) => setProfileData({ ...profileData, mapUrl: e.target.value, maplink: e.target.value })}
+                    placeholder="Click to auto-capture current GPS location"
+                    className="w-full pl-9 pr-3 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-semibold text-slate-800 focus:bg-white focus:ring-2 focus:ring-[#0D4715] cursor-pointer"
                   />
                 </div>
               </div>
@@ -346,7 +410,7 @@ const CustomerAuthModal = ({ isOpen, onClose, onSuccess }) => {
               <button
                 type="submit"
                 disabled={loading}
-                className="w-full mt-2 py-3.5 bg-[#0D4715] hover:bg-[#1b5e20] text-white font-bold text-xs rounded-2xl shadow-md transition flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50"
+                className="w-full mt-3 py-3.5 bg-[#0D4715] hover:bg-[#1b5e20] text-white font-bold text-xs rounded-2xl shadow-md transition flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50"
               >
                 {loading ? 'Saving Profile...' : 'Save & Complete Profile'}
               </button>

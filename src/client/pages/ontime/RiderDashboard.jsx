@@ -84,6 +84,70 @@ const RiderDashboard = () => {
     return true; // 'all'
   });
 
+  const [navigatingOrderId, setNavigatingOrderId] = useState(null);
+
+  const getDestinationQuery = (order) => {
+    const mapUrlStr =
+      (typeof order.address === 'object' && (order.address?.mapUrl || order.address?.maplink)) ||
+      order.mapUrl ||
+      order.maplink ||
+      order.shippingDetails?.mapUrl ||
+      order.shippingDetails?.maplink ||
+      '';
+    const locationStr =
+      (typeof order.address === 'object' && order.address?.location) ||
+      order.shippingDetails?.location ||
+      order.deliveryAddress ||
+      order.shippingDetails?.address ||
+      '';
+    const pincodeStr =
+      (typeof order.address === 'object' && (order.address?.pincode || order.address?.Pincode)) ||
+      order.shippingDetails?.pincode ||
+      order.shippingDetails?.Pincode ||
+      '';
+
+    if (mapUrlStr) {
+      const coordMatch = mapUrlStr.match(/q=([-\d.]+),([-\d.]+)/);
+      if (coordMatch) {
+        return `${coordMatch[1]},${coordMatch[2]}`;
+      }
+      const destParam = mapUrlStr.match(/destination=([^&]+)/);
+      if (destParam) {
+        return destParam[1];
+      }
+      return encodeURIComponent(mapUrlStr);
+    }
+    return encodeURIComponent(`${locationStr}${pincodeStr ? ' ' + pincodeStr : ''}`);
+  };
+
+  const handleStartNavigation = (order) => {
+    const destination = getDestinationQuery(order);
+    setNavigatingOrderId(order.id);
+
+    if (navigator.geolocation) {
+      navigator.geolocation.getCurrentPosition(
+        (pos) => {
+          setNavigatingOrderId(null);
+          const { latitude, longitude } = pos.coords;
+          // 'Your location' bound to device current GPS and 'To' bound to customer destination
+          const navUrl = `https://www.google.com/maps/dir/?api=1&origin=${latitude},${longitude}&destination=${destination}&travelmode=driving`;
+          window.open(navUrl, '_blank', 'noopener,noreferrer');
+        },
+        () => {
+          setNavigatingOrderId(null);
+          // Fallback if device GPS permissions denied or times out
+          const navUrl = `https://www.google.com/maps/dir/?api=1&origin=Current+Location&destination=${destination}&travelmode=driving`;
+          window.open(navUrl, '_blank', 'noopener,noreferrer');
+        },
+        { timeout: 4000, enableHighAccuracy: true }
+      );
+    } else {
+      setNavigatingOrderId(null);
+      const navUrl = `https://www.google.com/maps/dir/?api=1&origin=Current+Location&destination=${destination}&travelmode=driving`;
+      window.open(navUrl, '_blank', 'noopener,noreferrer');
+    }
+  };
+
   return (
     <div className="min-h-screen bg-slate-950 text-slate-100 pb-16">
       {/* Sticky Mobile Header */}
@@ -194,7 +258,13 @@ const RiderDashboard = () => {
             displayedOrders.map((order) => {
               const itemsList = Object.values(order.items || {});
               const phoneNum = order.customerMobile || order.shippingDetails?.phone || '';
-              const addressStr = order.deliveryAddress || `${order.shippingDetails?.address || ''}, ${order.shippingDetails?.pincode || ''}`.trim();
+              const orderAddr = order.address || {};
+              const locationStr = (typeof order.address === 'object' && order.address?.location) || order.shippingDetails?.location || order.deliveryAddress || order.shippingDetails?.address || '';
+              const landmarkStr = (typeof order.address === 'object' && order.address?.landmark) || order.landmark || order.shippingDetails?.landmark || '';
+              const mapUrlStr = (typeof order.address === 'object' && (order.address?.mapUrl || order.address?.maplink)) || order.mapUrl || order.maplink || order.shippingDetails?.mapUrl || order.shippingDetails?.maplink || '';
+              const pincodeStr = (typeof order.address === 'object' && (order.address?.pincode || order.address?.Pincode)) || order.shippingDetails?.pincode || order.shippingDetails?.Pincode || '';
+              const addressStr = locationStr || 'No address specified';
+
               const isOut = order.status === 'Out For Delivery';
               const isDelivered = order.status === 'Delivered';
               const isFailed = order.status === 'Delivery Failed';
@@ -256,11 +326,22 @@ const RiderDashboard = () => {
                       </p>
                     )}
 
-                    <div className="text-slate-300 leading-relaxed font-medium flex items-start gap-1.5 bg-slate-950/60 p-2.5 rounded-xl border border-slate-800">
-                      <span className="text-amber-400 shrink-0 mt-0.5">
-                        <MaterialIcon name="location_on" size={16} />
-                      </span>
-                      <span className="text-xs text-slate-200">{addressStr || 'No address specified'}</span>
+                    <div className="text-slate-300 leading-relaxed font-medium bg-slate-950/60 p-2.5 rounded-xl border border-slate-800 space-y-1">
+                      <div className="flex items-start gap-1.5">
+                        <span className="text-amber-400 shrink-0 mt-0.5">
+                          <MaterialIcon name="location_on" size={16} />
+                        </span>
+                        <span className="text-xs text-slate-200">
+                          {addressStr}
+                          {pincodeStr ? ` - ${pincodeStr}` : ''}
+                        </span>
+                      </div>
+                      {landmarkStr && (
+                        <div className="flex items-center gap-1.5 pl-5 text-[11px] text-amber-300/90 font-medium">
+                          <MaterialIcon name="flag" size={13} className="text-amber-400 shrink-0" />
+                          <span>Landmark: {landmarkStr}</span>
+                        </div>
+                      )}
                     </div>
                   </div>
 
@@ -322,17 +403,22 @@ const RiderDashboard = () => {
                           </button>
                         )}
 
-                        <a
-                          href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(addressStr)}`}
-                          target="_blank"
-                          rel="noreferrer"
-                          className="min-h-[46px] bg-slate-800 hover:bg-slate-700 active:bg-slate-650 text-white rounded-xl font-bold text-xs flex items-center justify-center gap-2 transition border border-slate-700 active:scale-95 shadow-xs"
+                        <button
+                          type="button"
+                          onClick={() => handleStartNavigation(order)}
+                          disabled={navigatingOrderId === order.id}
+                          className="min-h-[46px] bg-slate-800 hover:bg-slate-700 active:bg-slate-650 text-white rounded-xl font-bold text-xs flex items-center justify-center gap-2 transition border border-slate-700 active:scale-95 shadow-xs cursor-pointer disabled:opacity-75"
+                          title="Navigate from your current device GPS location to customer's destination"
                         >
                           <span className="text-cyan-400 flex items-center">
-                            <MaterialIcon name="near_me" size={18} />
+                            <MaterialIcon
+                              name={navigatingOrderId === order.id ? 'sync' : 'navigation'}
+                              size={18}
+                              className={navigatingOrderId === order.id ? 'animate-spin' : ''}
+                            />
                           </span>
-                          <span>Open Maps</span>
-                        </a>
+                          <span>{navigatingOrderId === order.id ? 'Locating GPS...' : 'Start Navigation'}</span>
+                        </button>
                       </div>
 
                       {/* Main Delivery Status Progression */}

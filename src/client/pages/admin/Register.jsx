@@ -25,8 +25,16 @@ const Register = () => {
     setErrorMsg('');
     setSuccessMsg('');
 
-    if (formData.password !== formData.confirmPassword) {
-      setErrorMsg('Passwords do not match.');
+    const cleanName = formData.name.trim();
+    const cleanPhone = formData.phone.trim().replace(/\D/g, '');
+
+    if (cleanName.length < 2) {
+      setErrorMsg('Username must be at least 2 characters.');
+      return;
+    }
+
+    if (cleanPhone.length < 10) {
+      setErrorMsg('Please enter a valid 10-digit mobile number.');
       return;
     }
 
@@ -35,13 +43,25 @@ const Register = () => {
       return;
     }
 
-    const res = await register(formData);
+    if (formData.password !== formData.confirmPassword) {
+      setErrorMsg('Passwords do not match.');
+      return;
+    }
+
+    const payload = {
+      name: cleanName,
+      phone: cleanPhone,
+      password: formData.password,
+      role: 'admin',
+    };
+
+    const res = await register(payload);
     if (res.success) {
       setSuccessMsg('Account created successfully! Redirecting to login...');
       toast.success('Account created successfully!');
       setTimeout(() => navigate('/admin/login'), 1500);
     } else {
-      setErrorMsg(res.message);
+      setErrorMsg(res.message || 'Registration failed');
       toast.error(res.message || 'Registration failed');
     }
   };

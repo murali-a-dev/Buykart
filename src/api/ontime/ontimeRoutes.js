@@ -6,6 +6,8 @@ const { validate } = require('../middleware/validator');
 const { authenticateRider } = require('../middleware/authMiddleware');
 
 // OnTime Rider login with validation (unprotected)
+router.post('/rider/send-otp', controller.riderSendOtp);
+router.post('/send-otp', controller.riderSendOtp);
 router.post('/rider/verify-otp', validate([validation.validateRiderLogin]), controller.riderVerifyOtp);
 router.post('/verify-otp', validate([validation.validateRiderLogin]), controller.riderVerifyOtp);
 

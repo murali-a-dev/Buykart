@@ -20,13 +20,22 @@ const Account = () => {
   const [email, setEmail] = useState(customer?.email || '');
   const [mobile, setMobile] = useState(customer?.mobile || '');
 
-  // Addresses State
-  const [addresses, setAddresses] = useState(customer?.addresses || []);
+  // Addresses State (Structured: location, mapUrl, landmark, pincode)
+  const getInitialAddresses = () => {
+    if (Array.isArray(customer?.address) && customer.address.length > 0) return customer.address;
+    if (Array.isArray(customer?.addresses) && customer.addresses.length > 0) return customer.addresses;
+    if (customer?.address && typeof customer.address === 'object') return [customer.address];
+    return [];
+  };
+  const [addresses, setAddresses] = useState(getInitialAddresses());
   const [addressTag, setAddressTag] = useState('Home'); // 'Home' | 'Work' | 'Other'
-  const [newAddressText, setNewAddressText] = useState('');
-  const [newAddressPincode, setNewAddressPincode] = useState('');
+  const [addressLocation, setAddressLocation] = useState('');
+  const [addressLandmark, setAddressLandmark] = useState('');
+  const [addressMaplink, setAddressMaplink] = useState('');
+  const [addressPincode, setAddressPincode] = useState('');
   const [editingAddressIndex, setEditingAddressIndex] = useState(null);
   const [isAddingAddress, setIsAddingAddress] = useState(false);
+  const [detectingLocation, setDetectingLocation] = useState(false);
   const [saving, setSaving] = useState(false);
 
   // Orders State
@@ -41,7 +50,12 @@ const Account = () => {
       setName(customer.name || '');
       setEmail(customer.email || '');
       setMobile(customer.mobile || '');
-      setAddresses(customer.addresses || []);
+
+      let list = Array.isArray(customer.addresses) ? [...customer.addresses] : [];
+      if (list.length === 0 && customer.address && (customer.address.location || customer.address.Pincode)) {
+        list = [customer.address];
+      }
+      setAddresses(list);
     }
   }, [customer]);
 
@@ -129,13 +143,20 @@ const Account = () => {
 
   const handleSaveProfile = async (e) => {
     e.preventDefault();
+    // FIX: Validate email format before sending to server
+    if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim())) {
+      showError('Please enter a valid email address.');
+      return;
+    }
     setSaving(true);
     try {
       const payload = {
-        id: customer.id,
+        did: customer.did || customer.id,
+        id: customer.id || customer.did,
         name: name.trim(),
         mobile: String(mobile).trim(),
         email: email ? String(email).trim() : '',
+        address: addresses,
         addresses
       };
       const res = await axios.post('/website/customer/profile', payload);
@@ -149,17 +170,26 @@ const Account = () => {
     }
   };
 
-  // Helper to parse "[Home] 123 Street... - Pincode: 560001" format
-  const parseAddress = (rawAddr) => {
+  // Helper to normalize address objects and fallback legacy strings
+  const normalizeAddress = (rawAddr) => {
+    if (!rawAddr) return { tag: 'Home', location: '', mapUrl: '', landmark: '', pincode: '' };
+    if (typeof rawAddr === 'object') {
+      return {
+        tag: rawAddr.tag || 'Home',
+        location: rawAddr.location || rawAddr.text || rawAddr.street || '',
+        mapUrl: rawAddr.mapUrl || rawAddr.maplink || rawAddr.mapLink || '',
+        landmark: rawAddr.landmark || '',
+        pincode: rawAddr.pincode || rawAddr.Pincode || '',
+      };
+    }
+
     let str = String(rawAddr || '').trim();
     let tag = 'Home';
-
     const tagMatch = str.match(/^\[(.*?)\]\s*(.*)$/);
     if (tagMatch) {
       tag = tagMatch[1];
       str = tagMatch[2].trim();
     }
-
     let pincode = '';
     const pinMatch = str.match(/(?:[-,\s]+(?:Pincode|Pin|PIN)?[:\s]*)?(\b\d{6}\b)\s*$/i);
     if (pinMatch) {
@@ -167,70 +197,96 @@ const Account = () => {
       str = str.replace(/(?:[-,\s]+(?:Pincode|Pin|PIN)?[:\s]*)?\b\d{6}\b\s*$/i, '').trim();
       str = str.replace(/[-,\s]+$/, '').trim();
     }
-
-    return { tag, text: str, pincode };
-  };
-
-  const formatAddressString = (tag, text, pincode) => {
-    const cleanTag = tag || 'Home';
-    const cleanText = text.trim();
-    const cleanPin = pincode ? String(pincode).trim() : '';
-    if (cleanPin) {
-      return `[${cleanTag}] ${cleanText} - Pincode: ${cleanPin}`;
-    }
-    return `[${cleanTag}] ${cleanText}`;
+    return { tag, location: str, mapUrl: '', landmark: '', pincode };
   };
 
   const handleStartAddAddress = () => {
     setEditingAddressIndex(null);
     setAddressTag('Home');
-    setNewAddressText('');
-    setNewAddressPincode('');
+    setAddressLocation('');
+    setAddressMaplink('');
+    setAddressLandmark('');
+    setAddressPincode('');
     setIsAddingAddress(true);
   };
 
   const handleStartEditAddress = (idx) => {
-    const parsed = parseAddress(addresses[idx]);
+    const parsed = normalizeAddress(addresses[idx]);
     setAddressTag(parsed.tag || 'Home');
-    setNewAddressText(parsed.text || '');
-    setNewAddressPincode(parsed.pincode || '');
+    setAddressLocation(parsed.location || '');
+    setAddressMaplink(parsed.mapUrl || '');
+    setAddressLandmark(parsed.landmark || '');
+    setAddressPincode(parsed.pincode || '');
     setEditingAddressIndex(idx);
     setIsAddingAddress(true);
   };
 
-  const handleSaveAddress = async (e) => {
-    e.preventDefault();
-    if (!newAddressText.trim()) {
-      showError('Please enter the complete delivery address.');
+  const handleDetectLocation = () => {
+    if (!navigator.geolocation) {
+      showError('Geolocation is not supported by your browser.');
       return;
     }
-    if (newAddressPincode.trim() && !/^\d{6}$/.test(newAddressPincode.trim())) {
+    setDetectingLocation(true);
+    navigator.geolocation.getCurrentPosition(
+      (pos) => {
+        const { latitude, longitude } = pos.coords;
+        const link = `https://maps.google.com/?q=${latitude},${longitude}`;
+        setAddressMaplink(link);
+        setDetectingLocation(false);
+        showSuccess('Live GPS Location Link captured!');
+      },
+      (err) => {
+        setDetectingLocation(false);
+        showError('Unable to retrieve GPS coordinates. Please paste your Google Maps link.');
+      },
+      { timeout: 10000 }
+    );
+  };
+
+  const handleSaveAddress = async (e) => {
+    e.preventDefault();
+    if (!addressLocation.trim()) {
+      showError('Please enter your delivery location.');
+      return;
+    }
+    if (addressPincode.trim() && !/^\d{6}$/.test(addressPincode.trim())) {
       showError('Please enter a valid 6-digit delivery pincode.');
       return;
     }
 
-    const formatted = formatAddressString(addressTag, newAddressText, newAddressPincode);
+    const newObj = {
+      tag: addressTag || 'Home',
+      location: addressLocation.trim(),
+      mapUrl: addressMaplink.trim(),
+      landmark: addressLandmark.trim(),
+      pincode: addressPincode.trim()
+    };
+
     let updated;
     const wasEditing = editingAddressIndex !== null && editingAddressIndex >= 0;
     if (wasEditing) {
       updated = [...addresses];
-      updated[editingAddressIndex] = formatted;
+      updated[editingAddressIndex] = newObj;
     } else {
-      updated = [...addresses, formatted];
+      updated = [...addresses, newObj];
     }
 
     setAddresses(updated);
-    setNewAddressText('');
-    setNewAddressPincode('');
+    setAddressLocation('');
+    setAddressMaplink('');
+    setAddressLandmark('');
+    setAddressPincode('');
     setEditingAddressIndex(null);
     setIsAddingAddress(false);
 
     try {
       const payload = {
-        id: customer.id,
+        did: customer.did || customer.id,
+        id: customer.id || customer.did,
         name: customer.name,
         mobile: customer.mobile,
         email: customer.email,
+        address: updated,
         addresses: updated
       };
       const res = await axios.post('/website/customer/profile', payload);
@@ -504,7 +560,9 @@ const Account = () => {
                       </span>
                     </div>
                     <p className="text-sm font-black text-slate-900">+91 {mobile}</p>
-                    <p className="text-[11px] text-slate-400">Secured with one-time password (OTP)</p>
+                    <p className="text-[10px] text-slate-400 mt-0.5 flex items-center gap-1">
+                      <span>🔒</span> Verified number — cannot be changed without re-login
+                    </p>
                   </div>
 
                   {/* Email Tile */}
@@ -686,9 +744,9 @@ const Account = () => {
                         <input
                           type="text"
                           maxLength={6}
-                          value={newAddressPincode}
-                          onChange={(e) => setNewAddressPincode(e.target.value.replace(/\D/g, ''))}
-                          placeholder="6-digit Pincode (e.g. 560001)"
+                          value={addressPincode}
+                          onChange={(e) => setAddressPincode(e.target.value.replace(/\D/g, ''))}
+                          placeholder="6-digit Pincode (e.g. 638011)"
                           className="w-full pl-10 pr-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs sm:text-sm font-semibold text-slate-900 focus:bg-white focus:border-[#0D4715] focus:ring-1 focus:ring-[#0D4715] transition shadow-2xs"
                           required
                         />
@@ -696,19 +754,72 @@ const Account = () => {
                     </div>
                   </div>
 
-                  {/* Complete Street Address Details */}
+                  {/* Complete Location / Street Details */}
                   <div>
                     <label className="block text-[11px] font-black uppercase tracking-wider text-slate-600 mb-2">
-                      Complete Address Details <span className="text-rose-500">*</span>
+                      Location / Street Address <span className="text-rose-500">*</span>
                     </label>
                     <textarea
-                      rows={3}
-                      value={newAddressText}
-                      onChange={(e) => setNewAddressText(e.target.value)}
-                      placeholder="House / Flat No., Apartment or Building name, Street, Landmark, Area & City"
+                      rows={2}
+                      value={addressLocation}
+                      onChange={(e) => setAddressLocation(e.target.value)}
+                      placeholder="House / Flat No., Apartment / Building, Street, Area & City"
                       className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-2xl text-xs sm:text-sm font-semibold text-slate-900 focus:bg-white focus:border-[#0D4715] focus:ring-1 focus:ring-[#0D4715] transition shadow-2xs"
                       required
                     />
+                  </div>
+
+                  {/* Landmark & Google Maps Link Grid */}
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    {/* Landmark */}
+                    <div>
+                      <label className="block text-[11px] font-black uppercase tracking-wider text-slate-600 mb-2">
+                        Nearby Landmark
+                      </label>
+                      <div className="relative flex items-center">
+                        <MaterialIcon name="flag" size={18} className="absolute left-3.5 text-slate-400" />
+                        <input
+                          type="text"
+                          value={addressLandmark}
+                          onChange={(e) => setAddressLandmark(e.target.value)}
+                          placeholder="e.g. Near Bus Stand, Opp Temple"
+                          className="w-full pl-10 pr-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs sm:text-sm font-semibold text-slate-900 focus:bg-white focus:border-[#0D4715] focus:ring-1 focus:ring-[#0D4715] transition shadow-2xs"
+                        />
+                      </div>
+                    </div>
+
+                    {/* Google Maps Link with Auto-detect on click or button */}
+                    <div>
+                      <div className="flex items-center justify-between mb-2">
+                        <label className="block text-[11px] font-black uppercase tracking-wider text-slate-600">
+                          Google Maps Link (mapUrl)
+                        </label>
+                        <button
+                          type="button"
+                          onClick={handleDetectLocation}
+                          disabled={detectingLocation}
+                          className="text-[10px] font-bold text-emerald-800 hover:text-emerald-950 flex items-center gap-1 cursor-pointer disabled:opacity-50"
+                        >
+                          <MaterialIcon name="my_location" size={13} className={detectingLocation ? 'animate-spin' : ''} />
+                          <span>{detectingLocation ? 'Capturing GPS...' : 'Detect GPS Link'}</span>
+                        </button>
+                      </div>
+                      <div className="relative flex items-center">
+                        <MaterialIcon name="map" size={18} className="absolute left-3.5 text-slate-400" />
+                        <input
+                          type="url"
+                          value={addressMaplink}
+                          onClick={() => {
+                            if (!addressMaplink && !detectingLocation) {
+                              handleDetectLocation();
+                            }
+                          }}
+                          onChange={(e) => setAddressMaplink(e.target.value)}
+                          placeholder="Click to auto-capture current GPS location or paste map link"
+                          className="w-full pl-10 pr-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs sm:text-sm font-semibold text-slate-900 focus:bg-white focus:border-[#0D4715] focus:ring-1 focus:ring-[#0D4715] transition shadow-2xs cursor-pointer"
+                        />
+                      </div>
+                    </div>
                   </div>
 
                   <div className="flex items-center gap-3 pt-2">
@@ -736,7 +847,7 @@ const Account = () => {
             {/* Saved Addresses Cards Grid */}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               {addresses.map((rawAddr, idx) => {
-                const { tag, text, pincode } = parseAddress(rawAddr);
+                const { tag, location, landmark, mapUrl, pincode } = normalizeAddress(rawAddr);
                 const tagIcon = tag.toLowerCase() === 'work' ? 'business' : tag.toLowerCase() === 'other' ? 'place' : 'home';
                 const isCurrentlyEditing = isAddingAddress && editingAddressIndex === idx;
 
@@ -760,7 +871,7 @@ const Account = () => {
                           {pincode && (
                             <span className="inline-flex items-center gap-1 text-[10px] font-black text-slate-600 bg-slate-100 px-2 py-0.5 rounded-md border border-slate-200">
                               <MaterialIcon name="pin_drop" size={11} className="text-slate-500" />
-                              <span>{pincode}</span>
+                              <span>PIN: {pincode}</span>
                             </span>
                           )}
 
@@ -791,8 +902,29 @@ const Account = () => {
                       </div>
 
                       <p className="text-xs sm:text-sm font-semibold text-slate-800 leading-relaxed">
-                        {text}
+                        {location}
                       </p>
+
+                      {landmark && (
+                        <div className="inline-flex items-center gap-1.5 text-xs text-amber-800 bg-amber-50 px-2.5 py-1 rounded-lg border border-amber-200/70 font-semibold">
+                          <MaterialIcon name="flag" size={13} className="text-amber-600" />
+                          <span>Landmark: {landmark}</span>
+                        </div>
+                      )}
+
+                      {mapUrl && (
+                        <div className="pt-1">
+                          <a
+                            href={mapUrl}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="inline-flex items-center gap-1 text-[11px] font-bold text-emerald-800 hover:text-emerald-950 hover:underline"
+                          >
+                            <MaterialIcon name="map" size={14} className="text-emerald-700" />
+                            <span>View on Google Maps &rarr;</span>
+                          </a>
+                        </div>
+                      )}
                     </div>
                   </div>
                 );

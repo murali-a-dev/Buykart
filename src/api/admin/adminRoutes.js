@@ -6,8 +6,8 @@ const { validate } = require('../middleware/validator');
 const { authenticateAdmin } = require('../middleware/authMiddleware');
 
 // Admin Staff Login and Registration (unprotected)
-router.post('/login', controller.login);
-router.post('/addUser', controller.addUser);
+router.post('/login', validate([validation.validateAdminLogin]), controller.login);
+router.post('/addUser', validate([validation.validateAdminRegistration]), controller.addUser);
 
 router.use(authenticateAdmin);
 

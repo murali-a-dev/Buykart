@@ -11,7 +11,9 @@ const ProtectedRoute = ({ children }) => {
     return <Navigate to="/admin/login" replace />;
   }
 
-  const isAdmin = currentUser.role === 'admin' || (currentUser.name && currentUser.name.toLowerCase() === 'admin');
+  // SECURITY FIX: Role check must rely solely on the JWT-decoded `role` field.
+  // The previous name-based fallback allowed anyone named "admin" to bypass this check.
+  const isAdmin = currentUser.role === 'admin';
 
   if (!isAdmin) {
     return (
@@ -22,7 +24,8 @@ const ProtectedRoute = ({ children }) => {
           </div>
           <h2 className="text-2xl font-extrabold text-slate-900">Admin Access Required</h2>
           <p className="text-sm text-slate-500">
-            Your account (<strong className="text-slate-800">{currentUser.name}</strong>) does not have administrator privileges to view this area.
+            Your account (<strong className="text-slate-800">{currentUser.name}</strong>) does not have
+            administrator privileges to view this area.
           </p>
           <div className="pt-2 flex justify-center">
             <Link

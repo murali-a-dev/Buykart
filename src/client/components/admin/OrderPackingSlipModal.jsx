@@ -106,8 +106,13 @@ const OrderPackingSlipModal = ({ order, isOpen, onClose }) => {
                 {order.customerMobile || shipping.phone || 'Phone Not Provided'}
               </p>
               <p className="text-slate-600 mt-1 leading-relaxed">
-                {order.deliveryAddress || `${shipping.address || ''} ${shipping.pincode ? `- ${shipping.pincode}` : ''}`}
+                {order.deliveryAddress || `${shipping.location || shipping.address || ''} ${shipping.Pincode || shipping.pincode ? `- ${shipping.Pincode || shipping.pincode}` : ''}`}
               </p>
+              {(order.address?.landmark || order.landmark || shipping.landmark) && (
+                <p className="text-[11px] text-amber-800 font-semibold mt-0.5">
+                  Landmark: {order.address?.landmark || order.landmark || shipping.landmark}
+                </p>
+              )}
             </div>
 
             <div className="border-t sm:border-t-0 sm:border-l border-slate-200 pt-3 sm:pt-0 sm:pl-4 space-y-2">

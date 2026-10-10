@@ -119,7 +119,6 @@ const Footer = () => {
           {/* STORE CATEGORIES (Span 2) */}
           <div className="lg:col-span-2 space-y-4">
             <h4 className="text-xs font-black text-white uppercase tracking-widest flex items-center gap-2">
-              <span className="w-1.5 h-1.5 rounded-full bg-emerald-400"></span>
               Catalog
             </h4>
             <ul className="space-y-2.5 text-xs">
@@ -159,7 +158,6 @@ const Footer = () => {
           {/* COMPANY & EXPLORE (Span 2) */}
           <div className="lg:col-span-2 space-y-4">
             <h4 className="text-xs font-black text-white uppercase tracking-widest flex items-center gap-2">
-              <span className="w-1.5 h-1.5 rounded-full bg-emerald-400"></span>
               Company
             </h4>
             <ul className="space-y-2.5 text-xs">
@@ -199,7 +197,6 @@ const Footer = () => {
           {/* CONTACT & DISPATCH HUB (Span 4) */}
           <div className="lg:col-span-4 space-y-4">
             <h4 className="text-xs font-black text-white uppercase tracking-widest flex items-center gap-2">
-              <span className="w-1.5 h-1.5 rounded-full bg-emerald-400"></span>
               Contact
             </h4>
 
@@ -260,7 +257,6 @@ const Footer = () => {
               className="text-emerald-400 font-extrabold underline hover:text-emerald-300 transition inline-flex items-center gap-1"
             >
               <span>Murali</span>
-              <span className="text-red-500">❤</span>
             </a>
           </div>
         </div>

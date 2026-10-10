@@ -101,8 +101,13 @@ const PackingModal = ({ order, isOpen, onClose, onSuccess }) => {
               <span className="font-bold text-slate-400 block uppercase text-[10px]">Delivery Address</span>
               <p className="font-semibold text-slate-800 leading-snug mt-0.5">
                 {order.deliveryAddress ||
-                  `${order.shippingDetails?.address}, ${order.shippingDetails?.pincode}`}
+                  `${order.shippingDetails?.location || order.shippingDetails?.address || ''}, ${order.shippingDetails?.Pincode || order.shippingDetails?.pincode || ''}`}
               </p>
+              {(order.address?.landmark || order.landmark || order.shippingDetails?.landmark) && (
+                <p className="text-[11px] text-amber-800 font-semibold mt-0.5">
+                  Landmark: {order.address?.landmark || order.landmark || order.shippingDetails?.landmark}
+                </p>
+              )}
             </div>
           </div>
 

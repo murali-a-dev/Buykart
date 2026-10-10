@@ -278,7 +278,10 @@ const Orders = () => {
           const idMatch = (o.id || '').toLowerCase().includes(query);
           const nameMatch = (o.userName || o.customerName || '').toLowerCase().includes(query);
           const phoneMatch = (o.customerMobile || o.shippingDetails?.phone || '').includes(query);
-          const addressMatch = (o.deliveryAddress || o.shippingDetails?.address || '').toLowerCase().includes(query);
+          const addrText = typeof o.address === 'object'
+            ? `${o.address?.location || ''} ${o.address?.landmark || ''} ${o.address?.Pincode || ''}`
+            : '';
+          const addressMatch = (o.deliveryAddress || o.shippingDetails?.address || o.shippingDetails?.location || addrText).toLowerCase().includes(query);
           const riderMatch = (o.assignedRiderName || '').toLowerCase().includes(query);
 
           if (!idMatch && !nameMatch && !phoneMatch && !addressMatch && !riderMatch) {
@@ -390,6 +393,10 @@ const Orders = () => {
         0
       );
     const shipping = order.shippingDetails || {};
+    const addressLocation = (typeof order.address === 'object' && order.address?.location) || shipping.location || order.deliveryAddress || shipping.address || 'Address on file';
+    const landmark = (typeof order.address === 'object' && order.address?.landmark) || order.landmark || shipping.landmark || '';
+    const maplink = (typeof order.address === 'object' && (order.address?.mapUrl || order.address?.maplink)) || order.mapUrl || order.maplink || shipping.mapUrl || shipping.maplink || '';
+    const pincode = (typeof order.address === 'object' && (order.address?.pincode || order.address?.Pincode)) || shipping.pincode || shipping.Pincode || '';
     const status = order.status || 'Pending';
     const customerName = order.userName || order.customerName || 'Customer';
     const customerPhone = order.customerMobile || shipping.phone || '';
@@ -559,8 +566,11 @@ const Orders = () => {
                 <span>Customer & Destination</span>
               </h4>
               <button
-                onClick={() => handleCopyText(order.deliveryAddress || `${shipping.address || ''}`, 'Address')}
-                className="text-[11px] font-semibold text-blue-600 hover:text-blue-700 flex items-center gap-0.5"
+                onClick={() => handleCopyText(
+                  [addressLocation, landmark, pincode ? `Pincode: ${pincode}` : ''].filter(Boolean).join(', '),
+                  'Address'
+                )}
+                className="text-[11px] font-semibold text-blue-600 hover:text-blue-700 flex items-center gap-0.5 cursor-pointer"
               >
                 <MaterialIcon name="content_copy" size={12} />
                 <span>Copy</span>
@@ -590,8 +600,27 @@ const Orders = () => {
                   Address
                 </span>
                 <p className="font-medium text-slate-700 leading-relaxed text-[11px] mt-0.5 break-words">
-                  {order.deliveryAddress || `${shipping.address || 'Address on file'} ${shipping.pincode ? `- ${shipping.pincode}` : ''}`}
+                  {addressLocation} {pincode ? `- ${pincode}` : ''}
                 </p>
+                {landmark && (
+                  <p className="text-[11px] text-amber-700 font-semibold mt-0.5 flex items-center gap-1">
+                    <MaterialIcon name="flag" size={12} className="text-amber-500 shrink-0" />
+                    <span>Landmark: {landmark}</span>
+                  </p>
+                )}
+                {maplink && (
+                  <div className="mt-1">
+                    <a
+                      href={maplink}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="inline-flex items-center gap-1 text-[11px] font-bold text-blue-600 hover:text-blue-800 hover:underline"
+                    >
+                      <MaterialIcon name="open_in_new" size={12} />
+                      <span>Open in Google Maps</span>
+                    </a>
+                  </div>
+                )}
               </div>
 
               <div>
@@ -1358,11 +1387,6 @@ const Orders = () => {
                                       : 'bg-amber-50 text-amber-700 border-amber-200'
                                   }`}
                                 >
-                                  <span
-                                    className={`w-1.5 h-1.5 rounded-full ${
-                                      paymentMethod.toLowerCase().includes('online') ? 'bg-emerald-500' : 'bg-amber-500'
-                                    }`}
-                                  />
                                   {paymentMethod}
                                 </span>
                               </td>
@@ -1372,7 +1396,6 @@ const Orders = () => {
                                 <span
                                   className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-bold border ${theme.bg}`}
                                 >
-                                  <span className={`w-1.5 h-1.5 rounded-full ${theme.dot}`} />
                                   <span>{status}</span>
                                 </span>
                               </td>
