@@ -9,15 +9,42 @@ const app = express();
 const port = process.env.PORT || 3000;
 
 // ── CORS ──────────────────────────────────────────────────────────
-// Restrict to known origin in production; allow all in development
-const allowedOrigin = process.env.ALLOWED_ORIGIN || 'http://localhost:5173';
+const defaultAllowedOrigins = [
+    'http://localhost:5173',
+    'http://localhost:3000',
+    'http://localhost:4173',
+    'http://127.0.0.1:5173',
+    'https://buykart-supermart.vercel.app'
+];
+
+const envOrigins = process.env.ALLOWED_ORIGIN
+    ? process.env.ALLOWED_ORIGIN.split(',').map(o => o.trim()).filter(Boolean)
+    : [];
+
+const allowedOrigins = Array.from(new Set([...defaultAllowedOrigins, ...envOrigins]));
 const isDev = process.env.NODE_ENV !== 'production';
 
 app.use(cors({
-    origin: isDev ? true : allowedOrigin,
+    origin: (origin, callback) => {
+        // Allow requests with no origin (e.g., mobile apps, curl, server-to-server)
+        if (!origin) return callback(null, true);
+
+        // Allow all in local development
+        if (isDev) return callback(null, true);
+
+        // Allow explicit origins or any Vercel deployment (production & preview branches)
+        const isAllowed = allowedOrigins.includes(origin) ||
+            /^https:\/\/([a-zA-Z0-9-]+\.)?vercel\.app$/.test(origin);
+
+        if (isAllowed) {
+            return callback(null, true);
+        }
+
+        return callback(null, false);
+    },
     credentials: true,
     methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
-    allowedHeaders: ['Content-Type', 'Authorization']
+    allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With', 'Accept', 'Origin']
 }));
 
 // ── BODY PARSING ──────────────────────────────────────────────────
