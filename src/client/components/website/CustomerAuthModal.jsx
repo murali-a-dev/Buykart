@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import axios from 'axios';
 import { useAuth } from '../../context/AuthContext';
 import MaterialIcon from '../common/MaterialIcon';
+import MapLocationPickerModal from './MapLocationPickerModal';
 
 const CustomerAuthModal = ({ isOpen, onClose, onSuccess }) => {
   const { loginCustomer } = useAuth();
@@ -24,6 +25,7 @@ const CustomerAuthModal = ({ isOpen, onClose, onSuccess }) => {
     pincode: ''
   });
   const [detectingGps, setDetectingGps] = useState(false);
+  const [isMapPickerOpen, setIsMapPickerOpen] = useState(false);
 
   // Lock background scrolling while modal is open
   useEffect(() => {
@@ -63,6 +65,18 @@ const CustomerAuthModal = ({ isOpen, onClose, onSuccess }) => {
       },
       { timeout: 10000 }
     );
+  };
+
+  const handleConfirmMapLocation = ({ mapUrl, formattedAddress, pincode, landmark }) => {
+    setProfileData((prev) => ({
+      ...prev,
+      mapUrl: mapUrl || prev.mapUrl,
+      maplink: mapUrl || prev.maplink,
+      location: !prev.location?.trim() && formattedAddress ? formattedAddress : prev.location,
+      pincode: !prev.pincode?.trim() && pincode ? pincode : prev.pincode,
+      landmark: !prev.landmark?.trim() && landmark ? landmark : prev.landmark,
+    }));
+    showToast('Delivery location selected on map!');
   };
 
   const handleSendOtp = async (e) => {
@@ -380,12 +394,11 @@ const CustomerAuthModal = ({ isOpen, onClose, onSuccess }) => {
                   <label className="text-[11px] font-bold text-slate-700 uppercase">Map Link (mapUrl)</label>
                   <button
                     type="button"
-                    onClick={handleDetectGps}
-                    disabled={detectingGps}
-                    className="text-[11px] text-[#0D4715] font-bold hover:underline flex items-center gap-1 cursor-pointer"
+                    onClick={() => setIsMapPickerOpen(true)}
+                    className="text-[11px] font-bold text-[#0D4715] hover:text-[#1b5e20] bg-emerald-50 hover:bg-emerald-100/80 px-2 py-0.5 rounded-lg border border-emerald-200/60 flex items-center gap-1 cursor-pointer transition"
                   >
-                    <MaterialIcon name="my_location" size={13} className={detectingGps ? 'animate-spin' : ''} />
-                    <span>{detectingGps ? 'Capturing GPS...' : 'Detect GPS'}</span>
+                    <MaterialIcon name="map" size={13} filled />
+                    <span>Choose on Map</span>
                   </button>
                 </div>
                 <div className="relative flex items-center">
@@ -395,15 +408,19 @@ const CustomerAuthModal = ({ isOpen, onClose, onSuccess }) => {
                   <input
                     type="url"
                     value={profileData.mapUrl || profileData.maplink}
-                    onClick={() => {
-                      if (!profileData.mapUrl && !profileData.maplink && !detectingGps) {
-                        handleDetectGps();
-                      }
-                    }}
+                    onClick={() => setIsMapPickerOpen(true)}
                     onChange={(e) => setProfileData({ ...profileData, mapUrl: e.target.value, maplink: e.target.value })}
-                    placeholder="Click to auto-capture current GPS location"
-                    className="w-full pl-9 pr-3 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-semibold text-slate-800 focus:bg-white focus:ring-2 focus:ring-[#0D4715] cursor-pointer"
+                    placeholder="Click to choose on map or paste map link"
+                    className="w-full pl-9 pr-16 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-semibold text-slate-800 focus:bg-white focus:ring-2 focus:ring-[#0D4715] cursor-pointer"
                   />
+                  <button
+                    type="button"
+                    onClick={() => setIsMapPickerOpen(true)}
+                    className="absolute right-1.5 px-2 py-1 bg-[#0D4715] hover:bg-[#1b5e20] text-white text-[10px] font-bold rounded-lg transition cursor-pointer flex items-center gap-0.5"
+                  >
+                    <MaterialIcon name="edit_location_alt" size={12} />
+                    <span>Pick</span>
+                  </button>
                 </div>
               </div>
 
@@ -418,6 +435,15 @@ const CustomerAuthModal = ({ isOpen, onClose, onSuccess }) => {
           )}
         </div>
       </div>
+
+      {/* Amazon-style Map Location Picker Modal */}
+      <MapLocationPickerModal
+        isOpen={isMapPickerOpen}
+        onClose={() => setIsMapPickerOpen(false)}
+        initialMapUrl={profileData.mapUrl || profileData.maplink}
+        onConfirmLocation={handleConfirmMapLocation}
+        title="Choose Delivery Address on Map"
+      />
     </div>
   );
 };

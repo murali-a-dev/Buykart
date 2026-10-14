@@ -5,6 +5,7 @@ import { useAuth } from '../../context/AuthContext';
 import { getProductImageUrl, DEFAULT_PRODUCT_IMAGE } from '../../utils/imageHelper';
 import { useToast } from '../../components/common/Toast';
 import CustomerAuthModal from '../../components/website/CustomerAuthModal';
+import MapLocationPickerModal from '../../components/website/MapLocationPickerModal';
 import MaterialIcon from '../../components/common/MaterialIcon';
 
 const Cart = () => {
@@ -38,6 +39,7 @@ const Cart = () => {
     paymentMethod: 'COD',
   });
   const [detectingLocation, setDetectingLocation] = useState(false);
+  const [isMapPickerOpen, setIsMapPickerOpen] = useState(false);
 
   const items = Object.values(cart);
   const rawTotalPrice = getTotalPrice();
@@ -140,6 +142,20 @@ const Cart = () => {
       },
       { timeout: 10000 }
     );
+  };
+
+  const handleConfirmMapLocation = ({ mapUrl, formattedAddress, pincode, landmark }) => {
+    setShippingDetails((prev) => ({
+      ...prev,
+      mapUrl: mapUrl || prev.mapUrl,
+      maplink: mapUrl || prev.maplink,
+      address: !prev.address?.trim() && formattedAddress ? formattedAddress : prev.address,
+      location: !prev.location?.trim() && formattedAddress ? formattedAddress : prev.location,
+      pincode: !prev.pincode?.trim() && pincode ? pincode : prev.pincode,
+      Pincode: !prev.Pincode?.trim() && pincode ? pincode : prev.Pincode,
+      landmark: !prev.landmark?.trim() && landmark ? landmark : prev.landmark,
+    }));
+    showSuccess('Delivery location selected on map!');
   };
 
   const handleOpenCheckoutModal = () => {
@@ -761,28 +777,31 @@ const Cart = () => {
                       <label className="text-xs font-bold text-slate-700">Google Maps Link (mapUrl)</label>
                       <button
                         type="button"
-                        onClick={handleDetectGPSLocation}
-                        disabled={detectingLocation}
-                        className="text-[10px] font-bold text-emerald-800 hover:text-emerald-950 flex items-center gap-1 cursor-pointer disabled:opacity-50"
+                        onClick={() => setIsMapPickerOpen(true)}
+                        className="text-[11px] font-bold text-[#0D4715] hover:text-[#1b5e20] bg-emerald-50 hover:bg-emerald-100/80 px-2.5 py-1 rounded-lg border border-emerald-200/60 flex items-center gap-1.5 cursor-pointer transition shadow-2xs"
                       >
-                        <MaterialIcon name="my_location" size={12} className={detectingLocation ? 'animate-spin' : ''} />
-                        <span>{detectingLocation ? 'Capturing GPS...' : 'Detect GPS'}</span>
+                        <MaterialIcon name="map" size={14} filled />
+                        <span>Choose on Map</span>
                       </button>
                     </div>
-                    <div className="relative">
-                      <MaterialIcon name="map" size={17} className="absolute left-3.5 top-3 text-slate-400" />
+                    <div className="relative flex items-center">
+                      <MaterialIcon name="map" size={17} className="absolute left-3.5 text-slate-400" />
                       <input
                         type="url"
                         value={shippingDetails.mapUrl || shippingDetails.maplink}
-                        onClick={() => {
-                          if (!shippingDetails.mapUrl && !shippingDetails.maplink && !detectingLocation) {
-                            handleDetectGPSLocation();
-                          }
-                        }}
+                        onClick={() => setIsMapPickerOpen(true)}
                         onChange={(e) => setShippingDetails({ ...shippingDetails, mapUrl: e.target.value, maplink: e.target.value })}
-                        className="w-full pl-10 pr-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs sm:text-sm font-semibold focus:ring-2 focus:ring-emerald-600 focus:bg-white transition cursor-pointer"
-                        placeholder="Click to auto-capture current GPS location or paste map link"
+                        className="w-full pl-10 pr-20 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs sm:text-sm font-semibold focus:ring-2 focus:ring-emerald-600 focus:bg-white transition cursor-pointer"
+                        placeholder="Click to choose on map or paste map link"
                       />
+                      <button
+                        type="button"
+                        onClick={() => setIsMapPickerOpen(true)}
+                        className="absolute right-2 px-2.5 py-1 bg-[#0D4715] hover:bg-[#1b5e20] text-white text-[11px] font-bold rounded-lg transition cursor-pointer flex items-center gap-1"
+                      >
+                        <MaterialIcon name="edit_location_alt" size={13} />
+                        <span>Pick</span>
+                      </button>
                     </div>
                   </div>
                 </div>
@@ -1006,6 +1025,15 @@ const Cart = () => {
           }}
         />
       )}
+
+      {/* AMAZON-STYLE MAP LOCATION PICKER MODAL */}
+      <MapLocationPickerModal
+        isOpen={isMapPickerOpen}
+        onClose={() => setIsMapPickerOpen(false)}
+        initialMapUrl={shippingDetails.mapUrl || shippingDetails.maplink}
+        onConfirmLocation={handleConfirmMapLocation}
+        title="Choose Delivery Address on Map"
+      />
     </div>
   );
 };

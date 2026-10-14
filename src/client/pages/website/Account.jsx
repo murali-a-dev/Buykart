@@ -4,6 +4,7 @@ import { useNavigate, Link } from 'react-router-dom';
 import axios from 'axios';
 import { useToast } from '../../components/common/Toast';
 import CustomerAuthModal from '../../components/website/CustomerAuthModal';
+import MapLocationPickerModal from '../../components/website/MapLocationPickerModal';
 import MaterialIcon from '../../components/common/MaterialIcon';
 
 const Account = () => {
@@ -36,6 +37,7 @@ const Account = () => {
   const [editingAddressIndex, setEditingAddressIndex] = useState(null);
   const [isAddingAddress, setIsAddingAddress] = useState(false);
   const [detectingLocation, setDetectingLocation] = useState(false);
+  const [isMapPickerOpen, setIsMapPickerOpen] = useState(false);
   const [saving, setSaving] = useState(false);
 
   // Orders State
@@ -241,6 +243,20 @@ const Account = () => {
       },
       { timeout: 10000 }
     );
+  };
+
+  const handleConfirmMapLocation = ({ mapUrl, formattedAddress, pincode, landmark }) => {
+    if (mapUrl) setAddressMaplink(mapUrl);
+    if (!addressLocation.trim() && formattedAddress) {
+      setAddressLocation(formattedAddress);
+    }
+    if (!addressPincode.trim() && pincode) {
+      setAddressPincode(pincode);
+    }
+    if (!addressLandmark.trim() && landmark) {
+      setAddressLandmark(landmark);
+    }
+    showSuccess('Delivery location selected on map!');
   };
 
   const handleSaveAddress = async (e) => {
@@ -788,7 +804,7 @@ const Account = () => {
                       </div>
                     </div>
 
-                    {/* Google Maps Link with Auto-detect on click or button */}
+                    {/* Google Maps Link with Choose on Map (Amazon style) */}
                     <div>
                       <div className="flex items-center justify-between mb-2">
                         <label className="block text-[11px] font-black uppercase tracking-wider text-slate-600">
@@ -796,12 +812,11 @@ const Account = () => {
                         </label>
                         <button
                           type="button"
-                          onClick={handleDetectLocation}
-                          disabled={detectingLocation}
-                          className="text-[10px] font-bold text-emerald-800 hover:text-emerald-950 flex items-center gap-1 cursor-pointer disabled:opacity-50"
+                          onClick={() => setIsMapPickerOpen(true)}
+                          className="text-[11px] font-bold text-[#0D4715] hover:text-[#1b5e20] bg-emerald-50 hover:bg-emerald-100/80 px-2.5 py-1 rounded-lg border border-emerald-200/60 flex items-center gap-1.5 cursor-pointer transition shadow-2xs"
                         >
-                          <MaterialIcon name="my_location" size={13} className={detectingLocation ? 'animate-spin' : ''} />
-                          <span>{detectingLocation ? 'Capturing GPS...' : 'Detect GPS Link'}</span>
+                          <MaterialIcon name="map" size={14} filled />
+                          <span>Choose on Map</span>
                         </button>
                       </div>
                       <div className="relative flex items-center">
@@ -809,15 +824,19 @@ const Account = () => {
                         <input
                           type="url"
                           value={addressMaplink}
-                          onClick={() => {
-                            if (!addressMaplink && !detectingLocation) {
-                              handleDetectLocation();
-                            }
-                          }}
+                          onClick={() => setIsMapPickerOpen(true)}
                           onChange={(e) => setAddressMaplink(e.target.value)}
-                          placeholder="Click to auto-capture current GPS location or paste map link"
-                          className="w-full pl-10 pr-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs sm:text-sm font-semibold text-slate-900 focus:bg-white focus:border-[#0D4715] focus:ring-1 focus:ring-[#0D4715] transition shadow-2xs cursor-pointer"
+                          placeholder="Click to choose on map or paste Google Maps link"
+                          className="w-full pl-10 pr-24 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs sm:text-sm font-semibold text-slate-900 focus:bg-white focus:border-[#0D4715] focus:ring-1 focus:ring-[#0D4715] transition shadow-2xs cursor-pointer"
                         />
+                        <button
+                          type="button"
+                          onClick={() => setIsMapPickerOpen(true)}
+                          className="absolute right-2 px-2.5 py-1 bg-[#0D4715] hover:bg-[#1b5e20] text-white text-[11px] font-bold rounded-lg transition cursor-pointer flex items-center gap-1"
+                        >
+                          <MaterialIcon name="edit_location_alt" size={13} />
+                          <span>Pick</span>
+                        </button>
                       </div>
                     </div>
                   </div>
@@ -844,110 +863,112 @@ const Account = () => {
               </div>
             )}
 
-            {/* Saved Addresses Cards Grid */}
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              {addresses.map((rawAddr, idx) => {
-                const { tag, location, landmark, mapUrl, pincode } = normalizeAddress(rawAddr);
-                const tagIcon = tag.toLowerCase() === 'work' ? 'business' : tag.toLowerCase() === 'other' ? 'place' : 'home';
-                const isCurrentlyEditing = isAddingAddress && editingAddressIndex === idx;
+            {/* Saved Addresses Cards Grid (hidden while editing or adding an address) */}
+            {!isAddingAddress && (
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 animate-in fade-in duration-200">
+                {addresses.map((rawAddr, idx) => {
+                  const { tag, location, landmark, mapUrl, pincode } = normalizeAddress(rawAddr);
+                  const tagIcon = tag.toLowerCase() === 'work' ? 'business' : tag.toLowerCase() === 'other' ? 'place' : 'home';
+                  const isCurrentlyEditing = isAddingAddress && editingAddressIndex === idx;
 
-                return (
-                  <div
-                    key={idx}
-                    className={`bg-white p-5 rounded-3xl shadow-xs border flex flex-col justify-between gap-4 transition group ${
-                      isCurrentlyEditing
-                        ? 'border-[#0D4715] ring-2 ring-emerald-100 shadow-sm'
-                        : 'border-slate-200/90 hover:shadow-sm'
-                    }`}
-                  >
-                    <div className="space-y-3">
-                      <div className="flex items-center justify-between">
-                        <div className="flex flex-wrap items-center gap-2">
-                          <span className="inline-flex items-center gap-1 text-[10px] font-black uppercase bg-emerald-100 text-emerald-950 px-2.5 py-0.5 rounded-md border border-emerald-200/70">
-                            <MaterialIcon name={tagIcon} size={12} />
-                            <span>{tag}</span>
-                          </span>
-
-                          {pincode && (
-                            <span className="inline-flex items-center gap-1 text-[10px] font-black text-slate-600 bg-slate-100 px-2 py-0.5 rounded-md border border-slate-200">
-                              <MaterialIcon name="pin_drop" size={11} className="text-slate-500" />
-                              <span>PIN: {pincode}</span>
+                  return (
+                    <div
+                      key={idx}
+                      className={`bg-white p-5 rounded-3xl shadow-xs border flex flex-col justify-between gap-4 transition group ${
+                        isCurrentlyEditing
+                          ? 'border-[#0D4715] ring-2 ring-emerald-100 shadow-sm'
+                          : 'border-slate-200/90 hover:shadow-sm'
+                      }`}
+                    >
+                      <div className="space-y-3">
+                        <div className="flex items-center justify-between">
+                          <div className="flex flex-wrap items-center gap-2">
+                            <span className="inline-flex items-center gap-1 text-[10px] font-black uppercase bg-emerald-100 text-emerald-950 px-2.5 py-0.5 rounded-md border border-emerald-200/70">
+                              <MaterialIcon name={tagIcon} size={12} />
+                              <span>{tag}</span>
                             </span>
-                          )}
 
-                          {idx === 0 && (
-                            <span className="text-[10px] font-bold text-slate-400">
-                              Default
-                            </span>
-                          )}
+                            {pincode && (
+                              <span className="inline-flex items-center gap-1 text-[10px] font-black text-slate-600 bg-slate-100 px-2 py-0.5 rounded-md border border-slate-200">
+                                <MaterialIcon name="pin_drop" size={11} className="text-slate-500" />
+                                <span>PIN: {pincode}</span>
+                              </span>
+                            )}
+
+                            {idx === 0 && (
+                              <span className="text-[10px] font-bold text-slate-400">
+                                Default
+                              </span>
+                            )}
+                          </div>
+
+                          <div className="flex items-center gap-1">
+                            <button
+                              onClick={() => handleStartEditAddress(idx)}
+                              className="text-slate-400 hover:text-[#0D4715] p-1.5 rounded-lg hover:bg-emerald-50 transition cursor-pointer"
+                              title="Edit delivery address"
+                            >
+                              <MaterialIcon name="edit" size={16} />
+                            </button>
+
+                            <button
+                              onClick={() => handleDeleteAddress(idx)}
+                              className="text-slate-400 hover:text-rose-600 p-1.5 rounded-lg hover:bg-rose-50 transition cursor-pointer"
+                              title="Remove address"
+                            >
+                              <MaterialIcon name="delete" size={16} />
+                            </button>
+                          </div>
                         </div>
 
-                        <div className="flex items-center gap-1">
-                          <button
-                            onClick={() => handleStartEditAddress(idx)}
-                            className="text-slate-400 hover:text-[#0D4715] p-1.5 rounded-lg hover:bg-emerald-50 transition cursor-pointer"
-                            title="Edit delivery address"
-                          >
-                            <MaterialIcon name="edit" size={16} />
-                          </button>
+                        <p className="text-xs sm:text-sm font-semibold text-slate-800 leading-relaxed">
+                          {location}
+                        </p>
 
-                          <button
-                            onClick={() => handleDeleteAddress(idx)}
-                            className="text-slate-400 hover:text-rose-600 p-1.5 rounded-lg hover:bg-rose-50 transition cursor-pointer"
-                            title="Remove address"
-                          >
-                            <MaterialIcon name="delete" size={16} />
-                          </button>
-                        </div>
+                        {landmark && (
+                          <div className="inline-flex items-center gap-1.5 text-xs text-amber-800 bg-amber-50 px-2.5 py-1 rounded-lg border border-amber-200/70 font-semibold">
+                            <MaterialIcon name="flag" size={13} className="text-amber-600" />
+                            <span>Landmark: {landmark}</span>
+                          </div>
+                        )}
+
+                        {mapUrl && (
+                          <div className="pt-1">
+                            <a
+                              href={mapUrl}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="inline-flex items-center gap-1 text-[11px] font-bold text-emerald-800 hover:text-emerald-950 hover:underline"
+                            >
+                              <MaterialIcon name="map" size={14} className="text-emerald-700" />
+                              <span>View on Google Maps &rarr;</span>
+                            </a>
+                          </div>
+                        )}
                       </div>
-
-                      <p className="text-xs sm:text-sm font-semibold text-slate-800 leading-relaxed">
-                        {location}
-                      </p>
-
-                      {landmark && (
-                        <div className="inline-flex items-center gap-1.5 text-xs text-amber-800 bg-amber-50 px-2.5 py-1 rounded-lg border border-amber-200/70 font-semibold">
-                          <MaterialIcon name="flag" size={13} className="text-amber-600" />
-                          <span>Landmark: {landmark}</span>
-                        </div>
-                      )}
-
-                      {mapUrl && (
-                        <div className="pt-1">
-                          <a
-                            href={mapUrl}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="inline-flex items-center gap-1 text-[11px] font-bold text-emerald-800 hover:text-emerald-950 hover:underline"
-                          >
-                            <MaterialIcon name="map" size={14} className="text-emerald-700" />
-                            <span>View on Google Maps &rarr;</span>
-                          </a>
-                        </div>
-                      )}
                     </div>
-                  </div>
-                );
-              })}
+                  );
+                })}
 
-              {addresses.length === 0 && (
-                <div className="md:col-span-2 bg-white p-12 rounded-3xl text-center border border-slate-200/80 space-y-3">
-                  <div className="w-14 h-14 rounded-2xl bg-slate-50 text-slate-400 flex items-center justify-center mx-auto border border-slate-200/60">
-                    <MaterialIcon name="wrong_location" size={28} />
+                {addresses.length === 0 && (
+                  <div className="md:col-span-2 bg-white p-12 rounded-3xl text-center border border-slate-200/80 space-y-3">
+                    <div className="w-14 h-14 rounded-2xl bg-slate-50 text-slate-400 flex items-center justify-center mx-auto border border-slate-200/60">
+                      <MaterialIcon name="wrong_location" size={28} />
+                    </div>
+                    <h4 className="text-base font-black text-slate-800">No Saved Delivery Addresses</h4>
+                    <p className="text-xs text-slate-500 font-medium max-w-sm mx-auto">
+                      Add your home or office address to enable 1-click hyperlocal delivery at checkout.
+                    </p>
+                    <button
+                      onClick={() => setIsAddingAddress(true)}
+                      className="inline-block mt-2 px-5 py-2.5 bg-[#0D4715] hover:bg-[#1b5e20] text-white text-xs font-bold rounded-xl shadow-sm transition cursor-pointer"
+                    >
+                      + Add Your First Address
+                    </button>
                   </div>
-                  <h4 className="text-base font-black text-slate-800">No Saved Delivery Addresses</h4>
-                  <p className="text-xs text-slate-500 font-medium max-w-sm mx-auto">
-                    Add your home or office address to enable 1-click hyperlocal delivery at checkout.
-                  </p>
-                  <button
-                    onClick={() => setIsAddingAddress(true)}
-                    className="inline-block mt-2 px-5 py-2.5 bg-[#0D4715] hover:bg-[#1b5e20] text-white text-xs font-bold rounded-xl shadow-sm transition cursor-pointer"
-                  >
-                    + Add Your First Address
-                  </button>
-                </div>
-              )}
-            </div>
+                )}
+              </div>
+            )}
 
           </div>
         )}
@@ -1165,6 +1186,15 @@ const Account = () => {
         )}
 
       </div>
+
+      {/* Amazon-style Map Location Picker Modal */}
+      <MapLocationPickerModal
+        isOpen={isMapPickerOpen}
+        onClose={() => setIsMapPickerOpen(false)}
+        initialMapUrl={addressMaplink}
+        onConfirmLocation={handleConfirmMapLocation}
+        title="Choose Delivery Address on Map"
+      />
     </div>
   );
 };

@@ -84,9 +84,7 @@ const RiderDashboard = () => {
     return true; // 'all'
   });
 
-  const [navigatingOrderId, setNavigatingOrderId] = useState(null);
-
-  const getDestinationQuery = (order) => {
+  const getNavigationUrl = (order) => {
     const mapUrlStr =
       (typeof order.address === 'object' && (order.address?.mapUrl || order.address?.maplink)) ||
       order.mapUrl ||
@@ -94,57 +92,81 @@ const RiderDashboard = () => {
       order.shippingDetails?.mapUrl ||
       order.shippingDetails?.maplink ||
       '';
+
+    // 1. Try extracting precise coordinates from mapUrl
+    if (mapUrlStr) {
+      const decodedUrl = decodeURIComponent(mapUrlStr);
+
+      // Match q=11.3427,77.6965 or query=11.3427,77.6965
+      const qMatch = decodedUrl.match(/(?:q|query)=([-\d.]+)\s*,\s*([-\d.]+)/i);
+      if (qMatch) {
+        return `https://www.google.com/maps/dir/?api=1&destination=${qMatch[1]},${qMatch[2]}&travelmode=driving`;
+      }
+
+      // Match @11.3427,77.6965
+      const atMatch = decodedUrl.match(/@([-\d.]+)\s*,\s*([-\d.]+)/);
+      if (atMatch) {
+        return `https://www.google.com/maps/dir/?api=1&destination=${atMatch[1]},${atMatch[2]}&travelmode=driving`;
+      }
+
+      // Match destination=...
+      const destParam = decodedUrl.match(/destination=([^&]+)/i);
+      if (destParam) {
+        return `https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(destParam[1])}&travelmode=driving`;
+      }
+
+      // Match raw coordinates string: "11.3427, 77.6965"
+      const rawMatch = mapUrlStr.trim().match(/^([-\d.]+)\s*,\s*([-\d.]+)$/);
+      if (rawMatch) {
+        return `https://www.google.com/maps/dir/?api=1&destination=${rawMatch[1]},${rawMatch[2]}&travelmode=driving`;
+      }
+
+      // If it's a short link (like maps.app.goo.gl) or already a google maps URL
+      if (mapUrlStr.startsWith('http://') || mapUrlStr.startsWith('https://')) {
+        return mapUrlStr;
+      }
+    }
+
+    // 2. Fallback to location text + landmark + pincode
     const locationStr =
-      (typeof order.address === 'object' && order.address?.location) ||
+      (typeof order.address === 'object' && (order.address?.location || order.address?.text || order.address?.street)) ||
       order.shippingDetails?.location ||
       order.deliveryAddress ||
       order.shippingDetails?.address ||
       '';
+
+    const landmarkStr =
+      (typeof order.address === 'object' && order.address?.landmark) ||
+      order.landmark ||
+      order.shippingDetails?.landmark ||
+      '';
+
     const pincodeStr =
       (typeof order.address === 'object' && (order.address?.pincode || order.address?.Pincode)) ||
       order.shippingDetails?.pincode ||
       order.shippingDetails?.Pincode ||
       '';
 
-    if (mapUrlStr) {
-      const coordMatch = mapUrlStr.match(/q=([-\d.]+),([-\d.]+)/);
-      if (coordMatch) {
-        return `${coordMatch[1]},${coordMatch[2]}`;
-      }
-      const destParam = mapUrlStr.match(/destination=([^&]+)/);
-      if (destParam) {
-        return destParam[1];
-      }
-      return encodeURIComponent(mapUrlStr);
+    const destinationParts = [locationStr, landmarkStr, pincodeStr].filter(Boolean).join(', ').trim();
+    if (destinationParts) {
+      return `https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(destinationParts)}&travelmode=driving`;
     }
-    return encodeURIComponent(`${locationStr}${pincodeStr ? ' ' + pincodeStr : ''}`);
+
+    return null;
   };
 
   const handleStartNavigation = (order) => {
-    const destination = getDestinationQuery(order);
-    setNavigatingOrderId(order.id);
+    const navUrl = getNavigationUrl(order);
+    if (!navUrl) {
+      toast.error('No delivery address or GPS coordinates available for this order.');
+      return;
+    }
 
-    if (navigator.geolocation) {
-      navigator.geolocation.getCurrentPosition(
-        (pos) => {
-          setNavigatingOrderId(null);
-          const { latitude, longitude } = pos.coords;
-          // 'Your location' bound to device current GPS and 'To' bound to customer destination
-          const navUrl = `https://www.google.com/maps/dir/?api=1&origin=${latitude},${longitude}&destination=${destination}&travelmode=driving`;
-          window.open(navUrl, '_blank', 'noopener,noreferrer');
-        },
-        () => {
-          setNavigatingOrderId(null);
-          // Fallback if device GPS permissions denied or times out
-          const navUrl = `https://www.google.com/maps/dir/?api=1&origin=Current+Location&destination=${destination}&travelmode=driving`;
-          window.open(navUrl, '_blank', 'noopener,noreferrer');
-        },
-        { timeout: 4000, enableHighAccuracy: true }
-      );
-    } else {
-      setNavigatingOrderId(null);
-      const navUrl = `https://www.google.com/maps/dir/?api=1&origin=Current+Location&destination=${destination}&travelmode=driving`;
-      window.open(navUrl, '_blank', 'noopener,noreferrer');
+    // Direct synchronous open ensures mobile browsers never block this as an unwanted popup
+    const opened = window.open(navUrl, '_blank', 'noopener,noreferrer');
+    if (!opened) {
+      // In case window.open is strictly blocked, navigate in current window
+      window.location.assign(navUrl);
     }
   };
 
@@ -406,18 +428,13 @@ const RiderDashboard = () => {
                         <button
                           type="button"
                           onClick={() => handleStartNavigation(order)}
-                          disabled={navigatingOrderId === order.id}
-                          className="min-h-[46px] bg-slate-800 hover:bg-slate-700 active:bg-slate-650 text-white rounded-xl font-bold text-xs flex items-center justify-center gap-2 transition border border-slate-700 active:scale-95 shadow-xs cursor-pointer disabled:opacity-75"
-                          title="Navigate from your current device GPS location to customer's destination"
+                          className="min-h-[46px] bg-slate-800 hover:bg-slate-700 active:bg-slate-650 text-white rounded-xl font-bold text-xs flex items-center justify-center gap-2 transition border border-slate-700 active:scale-95 shadow-xs cursor-pointer"
+                          title="Navigate to customer delivery destination"
                         >
                           <span className="text-cyan-400 flex items-center">
-                            <MaterialIcon
-                              name={navigatingOrderId === order.id ? 'sync' : 'navigation'}
-                              size={18}
-                              className={navigatingOrderId === order.id ? 'animate-spin' : ''}
-                            />
+                            <MaterialIcon name="navigation" size={18} />
                           </span>
-                          <span>{navigatingOrderId === order.id ? 'Locating GPS...' : 'Start Navigation'}</span>
+                          <span>Start Navigation</span>
                         </button>
                       </div>
 
